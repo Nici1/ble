@@ -21,11 +21,14 @@ import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.content.Context
+
 import android.os.Bundle
+import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -41,8 +44,7 @@ import com.punchthrough.blestarterappandroid.ble.toHexString
 import kotlinx.android.synthetic.main.activity_ble_operations.characteristics_recycler_view
 import kotlinx.android.synthetic.main.activity_ble_operations.log_scroll_view
 import kotlinx.android.synthetic.main.activity_ble_operations.log_text_view
-import kotlinx.android.synthetic.main.activity_ble_operations.mtu_field
-import kotlinx.android.synthetic.main.activity_ble_operations.request_mtu_button
+
 import org.jetbrains.anko.alert
 import org.jetbrains.anko.noButton
 import org.jetbrains.anko.selector
@@ -94,17 +96,7 @@ class BleOperationsActivity : AppCompatActivity() {
             title = getString(R.string.ble_playground)
         }
         setupRecyclerView()
-        request_mtu_button.setOnClickListener {
-            if (mtu_field.text.isNotEmpty() && mtu_field.text.isNotBlank()) {
-                mtu_field.text.toString().toIntOrNull()?.let { mtu ->
-                    log("Requesting for MTU value of $mtu")
-                    ConnectionManager.requestMtu(device, mtu)
-                } ?: log("Invalid MTU value: ${mtu_field.text}")
-            } else {
-                log("Please specify a numeric value for desired ATT MTU (23-517)")
-            }
-            hideKeyboard()
-        }
+
     }
 
     override fun onDestroy() {
@@ -214,7 +206,20 @@ class BleOperationsActivity : AppCompatActivity() {
             }
 
             onCharacteristicRead = { _, characteristic ->
-                log("Read from ${characteristic.uuid}: ${characteristic.value.toHexString()}")
+                //log("Read from ${characteristic.uuid}: ${characteristic.value}")
+
+
+
+                //if (characteristic.uuid == UUID.fromString("19B10001-E8F2-537E-4F6C-D104768A1214")) {
+                    val stringValue = characteristic.getStringValue(0) // Assuming the String is encoded as UTF-8
+                    runOnUiThread {
+                        // Do something with the received string value
+                        Log.i("BleOperationsActivity", "Received string: $stringValue")
+                        log( "Received string: $stringValue")
+
+
+                    }
+              //  }
             }
 
             onCharacteristicWrite = { _, characteristic ->
@@ -275,4 +280,9 @@ class BleOperationsActivity : AppCompatActivity() {
 
     private fun String.hexToBytes() =
         this.chunked(2).map { it.toUpperCase(Locale.US).toInt(16).toByte() }.toByteArray()
+
+
+
+
+
 }

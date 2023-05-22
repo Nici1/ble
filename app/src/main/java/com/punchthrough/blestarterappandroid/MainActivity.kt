@@ -24,11 +24,13 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -37,10 +39,12 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import com.punchthrough.blestarterappandroid.ble.ConnectionEventListener
 import com.punchthrough.blestarterappandroid.ble.ConnectionManager
+import com.punchthrough.blestarterappandroid.ble.isReadable
 import kotlinx.android.synthetic.main.activity_main.scan_button
 import kotlinx.android.synthetic.main.activity_main.scan_results_recycler_view
 import org.jetbrains.anko.alert
 import timber.log.Timber
+import java.util.UUID
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val LOCATION_PERMISSION_REQUEST_CODE = 2
@@ -96,7 +100,7 @@ class MainActivity : AppCompatActivity() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
-        scan_button.setOnClickListener { if (isScanning) stopBleScan() else startBleScan() }
+        scan_button.setOnClickListener {  if (isScanning) stopBleScan() else startBleScan() }
         setupRecyclerView()
     }
 
@@ -143,24 +147,58 @@ class MainActivity : AppCompatActivity() {
     private fun promptEnableBluetooth() {
         if (!bluetoothAdapter.isEnabled) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            startActivityForResult(enableBtIntent, ENABLE_BLUETOOTH_REQUEST_CODE)
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                startActivityForResult(enableBtIntent, ENABLE_BLUETOOTH_REQUEST_CODE)
+            }
+
         }
     }
 
     private fun startBleScan() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isLocationPermissionGranted) {
+
+        if (!isLocationPermissionGranted) {
             requestLocationPermission()
+            Log.i("Location permission", "NOT GRANTED")
         } else {
+            requestPermission(
+                Manifest.permission.BLUETOOTH_SCAN, ENABLE_BLUETOOTH_REQUEST_CODE)
+            checkPermissions()
+            Log.i("Location permission", "GRANTED")
             scanResults.clear()
             scanResultAdapter.notifyDataSetChanged()
-            bleScanner.startScan(null, scanSettings, scanCallback)
-            isScanning = true
+            Log.i("sdf",(ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) == PackageManager.PERMISSION_GRANTED).toString())
+
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_SCAN
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+
+                bleScanner.startScan(null, scanSettings, scanCallback)
+                isScanning = true
+            }
+
+
         }
     }
 
     private fun stopBleScan() {
-        bleScanner.stopScan(scanCallback)
-        isScanning = false
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            bleScanner.stopScan(scanCallback)
+            isScanning = false
+        }
+
     }
 
     private fun requestLocationPermission() {
@@ -182,6 +220,7 @@ class MainActivity : AppCompatActivity() {
             }.show()
         }
     }
+
 
     private fun setupRecyclerView() {
         scan_results_recycler_view.apply {
@@ -212,7 +251,16 @@ class MainActivity : AppCompatActivity() {
                 scanResultAdapter.notifyItemChanged(indexQuery)
             } else {
                 with(result.device) {
-                    Timber.i("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
+                    if (ActivityCompat.checkSelfPermission(
+                            applicationContext,
+                            Manifest.permission.BLUETOOTH
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.i("dsf","TUKA SME")
+                        Timber.i("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
+                    }
+
+
                 }
                 scanResults.add(result)
                 scanResultAdapter.notifyItemInserted(scanResults.size - 1)
@@ -257,4 +305,40 @@ class MainActivity : AppCompatActivity() {
     private fun Activity.requestPermission(permission: String, requestCode: Int) {
         ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
     }
+
+    private fun checkPermissions() {
+        val permissionsToCheck = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.BLUETOOTH,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADMIN
+            // Add other permissions you want to check here
+        )
+
+        val grantedPermissions = mutableListOf<String>()
+        val deniedPermissions = mutableListOf<String>()
+
+        for (permission in permissionsToCheck) {
+            if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
+                grantedPermissions.add(permission)
+            } else {
+                deniedPermissions.add(permission)
+            }
+        }
+
+        // Handle the granted and denied permissions as needed
+        // For example, you can display a message or request the denied permissions
+
+        // Example: Log the granted permissions
+        for (permission in grantedPermissions) {
+            Log.d(TAG, "Permission granted: $permission")
+        }
+
+        // Example: Log the denied permissions
+        for (permission in deniedPermissions) {
+            Log.d(TAG, "Permission denied: $permission")
+        }
+    }
+
 }
