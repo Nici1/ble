@@ -21,15 +21,20 @@ import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.content.Context
+import android.content.Intent
 
 import android.os.Bundle
+import android.os.Handler
 import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.Button
 import android.widget.EditText
 
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat.startActivity
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
@@ -53,6 +58,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+
+private lateinit var targetActivityIntent: Intent
+private var isAutoReadingEnabled = false
+
 
 class BleOperationsActivity : AppCompatActivity() {
 
@@ -146,30 +155,70 @@ class BleOperationsActivity : AppCompatActivity() {
         }
     }
 
+    private var autoReadHandler: Handler? = null
+    private var isAutoReadingEnabled = false
+
+    private fun startAutoReading(characteristic: BluetoothGattCharacteristic) {
+        isAutoReadingEnabled = true
+        autoReadHandler = Handler()
+        val autoReadRunnable = object : Runnable {
+            override fun run() {
+                if (isAutoReadingEnabled) {
+                    log("Reading from ${characteristic.uuid}")
+                    ConnectionManager.readCharacteristic(device, characteristic)
+                    autoReadHandler?.postDelayed(this, 2000) // Repeat every 2 seconds
+                }
+            }
+        }
+        autoReadHandler?.post(autoReadRunnable)
+
+
+    }
+
+    private fun stopAutoReading() {
+        isAutoReadingEnabled = false
+        autoReadHandler?.removeCallbacksAndMessages(null)
+        autoReadHandler = null
+    }
+
     private fun showCharacteristicOptions(characteristic: BluetoothGattCharacteristic) {
         characteristicProperties[characteristic]?.let { properties ->
-            selector("Select an action to perform", properties.map { it.action }) { _, i ->
-                when (properties[i]) {
+            val readActionIndex = properties.indexOfFirst { it == CharacteristicProperty.Readable }
+
+            if (readActionIndex != -1) {
+                val readAction = properties[readActionIndex]
+                when (readAction) {
                     CharacteristicProperty.Readable -> {
-                        log("Reading from ${characteristic.uuid}")
-                        ConnectionManager.readCharacteristic(device, characteristic)
-                    }
-                    CharacteristicProperty.Writable, CharacteristicProperty.WritableWithoutResponse -> {
-                        showWritePayloadDialog(characteristic)
-                    }
-                    CharacteristicProperty.Notifiable, CharacteristicProperty.Indicatable -> {
-                        if (notifyingCharacteristics.contains(characteristic.uuid)) {
-                            log("Disabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.disableNotifications(device, characteristic)
+                        if (isAutoReadingEnabled) {
+                            // Stop auto-reading if already enabled
+                            stopAutoReading()
                         } else {
-                            log("Enabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.enableNotifications(device, characteristic)
+                            // Start auto-reading if not enabled
+                            startAutoReading(characteristic)
+                        }
+                    }
+                    else -> {
+                        // Handle other actions
+                        when (readAction) {
+                            CharacteristicProperty.Writable, CharacteristicProperty.WritableWithoutResponse -> {
+                                showWritePayloadDialog(characteristic)
+                            }
+                            CharacteristicProperty.Notifiable, CharacteristicProperty.Indicatable -> {
+                                if (notifyingCharacteristics.contains(characteristic.uuid)) {
+                                    log("Disabling notifications on ${characteristic.uuid}")
+                                    ConnectionManager.disableNotifications(device, characteristic)
+                                } else {
+                                    log("Enabling notifications on ${characteristic.uuid}")
+                                    ConnectionManager.enableNotifications(device, characteristic)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+
 
     @SuppressLint("InflateParams")
     private fun showWritePayloadDialog(characteristic: BluetoothGattCharacteristic) {
@@ -209,17 +258,17 @@ class BleOperationsActivity : AppCompatActivity() {
                 //log("Read from ${characteristic.uuid}: ${characteristic.value}")
 
 
-
                 //if (characteristic.uuid == UUID.fromString("19B10001-E8F2-537E-4F6C-D104768A1214")) {
-                    val stringValue = characteristic.getStringValue(0) // Assuming the String is encoded as UTF-8
-                    runOnUiThread {
-                        // Do something with the received string value
-                        Log.i("BleOperationsActivity", "Received string: $stringValue")
-                        log( "Received string: $stringValue")
-
-
-                    }
-              //  }
+                val stringValue =
+                    characteristic.getStringValue(0) // Assuming the String is encoded as UTF-8
+                runOnUiThread {
+                    // Do something with the received string value
+                    //Log.i("BleOperationsActivity", "Received string: $stringValue")
+                    //log("Received string: $stringValue")
+                    sendBroadcastToDetectActivity(stringValue)
+                    startDetectActivity()
+                }
+                //  }
             }
 
             onCharacteristicWrite = { _, characteristic ->
@@ -268,12 +317,14 @@ class BleOperationsActivity : AppCompatActivity() {
     }
 
     private fun Context.hideKeyboard(view: View) {
-        val inputMethodManager = getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
+        val inputMethodManager =
+            getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
         inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     private fun EditText.showKeyboard() {
-        val inputMethodManager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        val inputMethodManager =
+            getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         requestFocus()
         inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
@@ -283,6 +334,18 @@ class BleOperationsActivity : AppCompatActivity() {
 
 
 
+
+    private fun sendBroadcastToDetectActivity(data: String) {
+        val intent = Intent("com.example.ACTION_DATA_RECEIVED")
+        intent.putExtra("data", data)
+        Log.i("sdfd",data)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    private fun startDetectActivity() {
+        val intent = Intent(this, Detect::class.java)
+        startActivity(intent)
+    }
 
 
 }

@@ -29,6 +29,7 @@
         >
         <activity
             android:name=".Detect"
+            android:launchMode="singleTop"
             android:screenOrientation="portrait"
             />
 
