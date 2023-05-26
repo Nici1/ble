@@ -166,7 +166,7 @@ class BleOperationsActivity : AppCompatActivity() {
                 if (isAutoReadingEnabled) {
                     log("Reading from ${characteristic.uuid}")
                     ConnectionManager.readCharacteristic(device, characteristic)
-                    autoReadHandler?.postDelayed(this, 2000) // Repeat every 2 seconds
+                    autoReadHandler?.postDelayed(this, 1500) // Repeat every 2 seconds
                 }
             }
         }
